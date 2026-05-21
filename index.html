@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>MercanFight</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --neon-orange: #ff5500;
+            --neon-blue: #00d2ff;
+            --bg-dark: #08080c;
+            --panel-bg: #111116;
+        }
+
+        body { 
+            background: var(--bg-dark); 
+            color: white; 
+            font-family: 'Segoe UI', sans-serif; 
+            margin: 0; 
+            overflow: hidden; 
+            display: flex; 
+            height: 100vh; 
+        }
+        
+        #sidebar { 
+            width: 320px; 
+            background: var(--panel-bg); 
+            border-right: 3px solid var(--neon-orange); 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 20px; 
+            box-shadow: 10px 0 30px rgba(0,0,0,0.8);
+            z-index: 100;
+        }
+
+        #game-area { 
+            flex-grow: 1; 
+            position: relative; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            background: radial-gradient(circle, #1a1a26 0%, #040406 100%);
+            padding: 20px;
+        }
+
+        canvas { 
+            background: #141419; 
+            border: 2px solid rgba(255, 255, 255, 0.03);
+            border-radius: 20px; 
+            max-width: 100%;
+            max-height: 100%;
+            aspect-ratio: 1200 / 600;
+            box-shadow: 0 30px 70px rgba(0, 0, 0, 0.9), inset 0 0 40px rgba(0,0,0,0.6);
+        }
+
+        /* HUD TASARIMI */
+        .hud-container {
+            position: absolute;
+            top: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 30px;
+            width: 85%;
+            z-index: 50;
+        }
+
+        .fighter-hud {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: rgba(5, 5, 8, 0.75);
+            padding: 12px 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.05);
+            backdrop-filter: blur(5px);
+        }
+
+        .fighter-name {
+            font-weight: 900;
+            font-size: 18px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        .bar-bg {
+            width: 100%;
+            height: 18px;
+            background: #222;
+            border-radius: 30px;
+            overflow: hidden;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.6);
+        }
+
+        .hp-bar {
+            height: 100%;
+            width: 100%;
+            border-radius: 30px;
+            transition: width 0.15s cubic-bezier(0.1, 0.8, 0.3, 1);
+        }
+        #hp-p1 { background: linear-gradient(90deg, #ff2a00, var(--neon-orange)); box-shadow: 0 0 15px rgba(255, 85, 0, 0.4); }
+        #hp-p2 { background: linear-gradient(90deg, var(--neon-blue), #0044ff); box-shadow: 0 0 15px rgba(0, 210, 255, 0.4); }
+
+        .btn { 
+            background: linear-gradient(135deg, var(--neon-orange), #cc3300); color: white; border: none; 
+            padding: 16px; border-radius: 10px; cursor: pointer; 
+            font-weight: 900; transition: 0.2s; text-transform: uppercase;
+            letter-spacing: 1px; box-shadow: 0 4px 15px rgba(255, 85, 0, 0.3);
+        }
+        .btn:hover { transform: translateY(-2px); filter: brightness(1.2); box-shadow: 0 6px 20px rgba(255, 85, 0, 0.5); }
+
+        #room-id {
+            background: #1a1a24; padding: 15px; border-radius: 10px; 
+            text-align: center; font-family: monospace; font-size: 20px;
+            color: var(--neon-orange); border: 1px solid rgba(255, 85, 0, 0.2);
+            font-weight: bold; letter-spacing: 1px;
+        }
+
+        #announcement { 
+            position: absolute; font-size: 100px; font-weight: 900; 
+            color: white; text-shadow: 0 0 40px rgba(0,0,0,1), 0 0 20px rgba(255,255,255,0.2); 
+            display: none; z-index: 200; pointer-events: none;
+            text-align: center; font-style: italic; letter-spacing: 2px;
+        }
+
+        .player-slot {
+            background: #161622; padding: 14px; border-radius: 10px;
+            border-left: 5px solid #333; font-size: 14px; margin-bottom: 10px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <h1 style="color:var(--neon-orange); margin:0; font-size: 24px; text-align: center; letter-spacing: 3px; text-shadow: 0 0 10px rgba(255,85,0,0.2);">MERCANFIGHT</h1>
+        <div id="room-id">ODA KODU: ...</div>
+        
+        <button class="btn" onclick="startMatch()">MAÇI BAŞLAT</button>
+
+        <div style="margin-top: 15px;">
+            <h4 style="margin: 0 0 10px 0; color: #62657a; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Savaşçılar</h4>
+            <div id="p1-slot" class="player-slot">P1: Bekleniyor...</div>
+            <div id="p2-slot" class="player-slot">P2: Bekleniyor...</div>
+        </div>
+    </div>
+
+    <div id="game-area">
+        <div id="announcement">READY</div>
+        
+        <div class="hud-container">
+            <div class="fighter-hud" style="text-align: left;">
+                <span class="fighter-name" id="name-p1" style="color: var(--neon-orange);">PLAYER 1</span>
+                <div class="bar-bg"><div id="hp-p1" class="hp-bar"></div></div>
+            </div>
+            
+            <div style="font-size: 28px; font-weight: 900; color: #4e5166; font-style: italic; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">VS</div>
+            
+            <div class="fighter-hud" style="text-align: right;">
+                <span class="fighter-name" id="name-p2" style="color: var(--neon-blue);">PLAYER 2</span>
+                <div class="bar-bg"><div id="hp-p2" class="hp-bar"></div></div>
+            </div>
+        </div>
+
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 1200; canvas.height = 600;
+
+        const shortId = Math.floor(1000 + Math.random() * 9000).toString();
+        const peer = new Peer("shadow-" + shortId);
+        
+        let players = {}; 
+        let slots = [null, null]; 
+        let isPaused = true;
+
+        const GROUND_Y = 500;
+        const GRAVITY = 0.65;
+
+        peer.on('open', () => document.getElementById('room-id').innerText = "ODA: " + shortId);
+
+        peer.on('connection', conn => {
+            conn.on('data', data => {
+                if(data.type === 'join') {
+                    let assignedSlot = slots.indexOf(null);
+                    if(assignedSlot !== -1 && !slots.includes(conn.peer)) {
+                        slots[assignedSlot] = conn.peer;
+                        
+                        players[conn.peer] = {
+                            id: assignedSlot + 1,
+                            nick: data.nick,
+                            x: assignedSlot === 0 ? 300 : 900,
+                            y: GROUND_Y,
+                            vx: 0, vy: 0,
+                            hp: 100,
+                            isGrounded: true,
+                            state: 'idle', 
+                            stateTimer: 0,
+                            dir: assignedSlot === 0 ? 1 : -1,
+                            // Jelimsi Ragdoll Esneklik Değişkenleri
+                            jellyScaleX: 1,
+                            jellyScaleY: 1,
+                            leanAngle: 0, // Hareket ederken yatma açısı
+                            headOffset: {x: 0, y: 0} // Darbe alınca bağımsız sallanan kafa
+                        };
+                        updateUI();
+                    }
+                }
+                
+                let p = players[conn.peer];
+                if(p && !isPaused) {
+                    if(data.type === 'move') {
+                        if(p.state !== 'punching' && p.state !== 'kicking' && p.state !== 'hit') {
+                            p.vx = data.x * 5.5;
+                        }
+                    }
+                    if(data.type === 'jump' && p.isGrounded) {
+                        p.vy = -15;
+                        p.isGrounded = false;
+                        // Zıplarken yukarı doğru uzama efekti
+                        p.jellyScaleY = 1.3;
+                        p.jellyScaleX = 0.8;
+                    }
+                    if(data.type === 'action' && p.state === 'idle') {
+                        p.state = data.value; 
+                        p.stateTimer = 14; 
+                        p.vx = data.value === 'punching' ? p.dir * 4 : p.dir * 6; // Atılırken ufak ileri hamle
+                        
+                        // Saldırıda esneme
+                        p.jellyScaleX = 1.2;
+                        p.jellyScaleY = 0.9;
+                        
+                        checkHit(p, data.value);
+                    }
+                }
+            });
+
+            conn.on('close', () => {
+                let idx = slots.indexOf(conn.peer);
+                if(idx !== -1) slots[idx] = null;
+                delete players[conn.peer];
+                updateUI();
+            });
+        });
+
+        function updateUI() {
+            document.getElementById('p1-slot').innerText = slots[0] ? `P1: ${players[slots[0]].nick}` : "P1: Bekleniyor...";
+            document.getElementById('p2-slot').innerText = slots[1] ? `P2: ${players[slots[1]].nick}` : "P2: Bekleniyor...";
+            if(slots[0]) document.getElementById('name-p1').innerText = players[slots[0]].nick;
+            if(slots[1]) document.getElementById('name-p2').innerText = players[slots[1]].nick;
+        }
+
+        function startMatch() {
+            if(!slots[0] || !slots[1]) { alert("İki dövüşçü de gelmeden meydan açılmaz kral!"); return; }
+            
+            players[slots[0]].hp = 100; players[slots[0]].x = 300; players[slots[0]].y = GROUND_Y;
+            players[slots[1]].hp = 100; players[slots[1]].x = 900; players[slots[1]].y = GROUND_Y;
+            document.getElementById('hp-p1').style.width = "100%";
+            document.getElementById('hp-p2').style.width = "100%";
+
+            let announce = document.getElementById('announcement');
+            announce.style.display = "block";
+            announce.innerText = "ROUND 1";
+            
+            setTimeout(() => { announce.innerText = "FIGHT!"; }, 1300);
+            setTimeout(() => { announce.style.display = "none"; isPaused = false; }, 2200);
+        }
+
+        function checkHit(attacker, attackType) {
+            let targetPeer = slots.find(id => id !== null && id !== slots[attacker.id - 1]);
+            if(!targetPeer) return;
+            let target = players[targetPeer];
+
+            let reach = attackType === 'punching' ? 75 : 95;
+            let distance = Math.abs(attacker.x - target.x);
+            let correctDir = (attacker.dir === 1 && target.x > attacker.x) || (attacker.dir === -1 && target.x < attacker.x);
+
+            if(distance < reach && Math.abs(attacker.y - target.y) < 70 && correctDir) {
+                target.hp = Math.max(0, target.hp - (attackType === 'punching' ? 7 : 12));
+                target.state = 'hit';
+                target.stateTimer = 12;
+                
+                // Ragdoll hasar sarsıntısı ve jöle sıkışması
+                target.vx = attacker.dir * 8;
+                target.vy = -4; 
+                target.isGrounded = false;
+                target.jellyScaleX = 1.4;
+                target.jellyScaleY = 0.7;
+                target.headOffset = { x: attacker.dir * 25, y: -10 }; // Kafa geriye savrulur
+                
+                document.getElementById(`hp-p${target.id}`).style.width = target.hp + "%";
+
+                if(target.hp <= 0) endMatch(attacker.nick);
+            }
+        }
+
+        function endMatch(winnerNick) {
+            isPaused = true;
+            let announce = document.getElementById('announcement');
+            announce.style.display = "block";
+            announce.innerText = winnerNick + " kazandi!";
+        }
+
+        // JELİMSİ RAGDOLL ÇÖP ADAM ÇİZİMİ
+        function drawStickman(p) {
+            ctx.save();
+            // Karakterin merkez tabanına odaklan
+            ctx.translate(p.x, p.y);
+            
+            // Koşma ve darbe yeme hızına göre gövdeyi eğme (Ragdoll hissi)
+            p.leanAngle = (p.vx * 0.04) * p.dir;
+            if(p.state === 'hit') p.leanAngle = -p.dir * 0.4;
+            ctx.rotate(p.leanAngle);
+            
+            // Jöle gibi ezilip büzülme ölçeklendirmesi
+            ctx.scale(p.jellyScaleX, p.jellyScaleY);
+
+            // Shadow Efekti (Geniş Parlama)
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = p.id === 1 ? 'rgba(255, 85, 0, 0.6)' : 'rgba(0, 210, 255, 0.6)';
+            ctx.fillStyle = "#0a0a0f";
+            ctx.strokeStyle = "#0a0a0f";
+            ctx.lineWidth = 7; // Çizgileri kalınlaştırıp daha dolgulu yaptık
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+
+            let time = Date.now() * 0.015;
+
+            // Kafa (Sallantılı kafa offseti ile)
+            ctx.beginPath();
+            ctx.arc(0 + p.headOffset.x, -100 + p.headOffset.y, 14, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Omurga (Hafif kıvrımlı omurga çizebilmek için yay kullanıyoruz)
+            ctx.beginPath();
+            ctx.moveTo(0, -86);
+            // Karakter boştayken bile nefes alıyormuş gibi jöle hareketi yapar
+            let breath = p.state === 'idle' ? Math.sin(time * 0.5) * 2 : 0;
+            ctx.quadraticCurveTo(p.dir * breath, -65, 0, -45);
+            ctx.stroke();
+
+            // --- KOLLAR ---
+            ctx.beginPath();
+            ctx.moveTo(0, -80);
+            if(p.state === 'punching') {
+                // İleri uzayan jeli akıcı kol
+                ctx.quadraticCurveTo(p.dir * 25, -85, p.dir * 60, -80);
+                // Arka kol korumada
+                ctx.moveTo(0, -80);
+                ctx.lineTo(p.dir * -10, -65);
+            } else if(p.state === 'hit') {
+                // Savrulan kollar
+                ctx.lineTo(p.dir * -25, -110);
+                ctx.moveTo(0, -80);
+                ctx.lineTo(p.dir * -15, -40);
+            } else {
+                // Koşarken/Dururken sallanan jöle kollar
+                let armWave = p.vx !== 0 ? Math.sin(time) * 25 : Math.sin(time * 0.3) * 4;
+                ctx.lineTo(p.dir * -15 + armWave, -55);
+                ctx.moveTo(0, -80);
+                ctx.lineTo(p.dir * 15 - armWave, -55);
+            }
+            ctx.stroke();
+
+            // --- BACAKLAR ---
+            ctx.beginPath();
+            ctx.moveTo(0, -45);
+            if(p.state === 'kicking') {
+                // Tekme bacağı (Esnemiş yay gibi)
+                ctx.quadraticCurveTo(p.dir * 35, -60, p.dir * 65, -60);
+                // Destek bacağı bükülür
+                ctx.moveTo(0, -45);
+                ctx.lineTo(p.dir * -15, 0);
+            } else if(!p.isGrounded) {
+                // Havada sarkan bacaklar
+                ctx.lineTo(-12, -10);
+                ctx.moveTo(0, -45);
+                ctx.lineTo(12, -10);
+            } else {
+                // Eğlenceli jöle yürüme döngüsü
+                let walk = p.vx !== 0 ? Math.sin(time) * 22 : 0;
+                ctx.lineTo(-15 + walk, 0);
+                ctx.moveTo(0, -45);
+                ctx.lineTo(15 - walk, 0);
+            }
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0,0, canvas.width, canvas.height);
+            
+            // Zemin Çizimi (Neon Çizgi)
+            ctx.save();
+            ctx.strokeStyle = "rgba(255,255,255,0.05)";
+            ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(0, GROUND_Y); ctx.lineTo(canvas.width, GROUND_Y); ctx.stroke();
+            ctx.restore();
+
+            let p1 = players[slots[0]];
+            let p2 = players[slots[1]];
+
+            if(p1 && p2 && !isPaused) {
+                p1.dir = p1.x < p2.x ? 1 : -1;
+                p2.dir = p2.x < p1.x ? 1 : -1;
+            }
+
+            for(let id in players) {
+                let p = players[id];
+                
+                if(p.stateTimer > 0) {
+                    p.stateTimer--;
+                    if(p.stateTimer === 0) p.state = 'idle';
+                }
+
+                // Jöle Değerlerini Normale Döndürme (Sürekli yaylanma sönümü)
+                p.jellyScaleX += (1 - p.jellyScaleX) * 0.15;
+                p.jellyScaleY += (1 - p.jellyScaleY) * 0.15;
+                p.headOffset.x += (0 - p.headOffset.x) * 0.15;
+                p.headOffset.y += (0 - p.headOffset.y) * 0.15;
+
+                p.x += p.vx;
+                p.y += p.vy;
+
+                if(p.state !== 'hit') p.vx *= 0.82;
+                else p.vx *= 0.92;
+
+                if(!p.isGrounded) {
+                    p.vy += GRAVITY;
+                    if(p.y >= GROUND_Y) {
+                        p.y = GROUND_Y;
+                        p.vy = 0;
+                        p.isGrounded = true;
+                        // Yere çakılınca jöle gibi ezilme efekti
+                        p.jellyScaleY = 0.65;
+                        p.jellyScaleX = 1.3;
+                    }
+                }
+
+                p.x = Math.max(60, Math.min(canvas.width - 60, p.x));
+                drawStickman(p);
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
